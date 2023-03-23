@@ -48,9 +48,30 @@ struct xen_domain_cfg {
 	const char *dtb_start, *dtb_end;
 };
 
+struct xen_domain_console {
+	struct xencons_interface *intf;
+	struct k_mutex lock;
+	struct k_thread ext_thrd;
+	struct k_thread int_thrd;
+	struct k_sem ext_sem;
+	struct k_sem int_sem;
+	atomic_t stop_thrd;
+	evtchn_port_t evtchn;
+	evtchn_port_t local_evtchn;
+	int stack_idx;
+	bool first_attach;
+
+	/* Local console ring buffer. This ring buffer differs from
+	 * standard one because it supports overruns. Number of lost
+	 * characters will be stored in `lost_chars` */
+	char *int_buf;
+	size_t int_prod;
+	size_t int_cons;
+	size_t lost_chars;
+};
+
 struct xen_domain {
 	uint32_t domid;
-	struct xencons_interface *intf;
 	struct xenstore_domain_interface *domint;
 	int num_vcpus;
 	int address_size;
@@ -58,13 +79,8 @@ struct xen_domain {
 	sys_dnode_t node;
 	size_t stack_slot;
 
-	struct k_sem console_sem;
-	struct k_thread console_thrd;
-	k_tid_t console_tid;
-	bool console_thrd_stop;
-	evtchn_port_t console_evtchn;
-	evtchn_port_t local_console_evtchn;
-
+	/* TODO: domains can have more than one console */
+	struct xen_domain_console console;
 	struct k_sem xb_sem;
 	struct k_thread xenstore_thrd;
 	bool xenstore_thrd_stop;

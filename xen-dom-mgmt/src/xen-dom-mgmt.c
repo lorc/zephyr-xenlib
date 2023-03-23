@@ -31,7 +31,7 @@
 #include "xen-dom-fdt.h"
 
 #include <xenstore_srv.h>
-#include <xen_shell.h>
+#include <xen_console.h>
 #include <xss.h>
 
 LOG_MODULE_REGISTER(xen_dom_mgmt);
@@ -116,10 +116,10 @@ static int allocate_domain_evtchns(struct xen_domain *domain)
 		       rc);
 		return rc;
 	}
-	domain->console_evtchn = rc;
+	domain->console.evtchn = rc;
 
 	LOG_DBG("Generated remote_domid = %u, console evtchn = %u", domain->domid,
-	       domain->console_evtchn);
+	       domain->console.evtchn);
 
 	return 0;
 }
@@ -615,7 +615,7 @@ int map_domain_console_ring(struct xen_domain *domain)
 		return rc;
 	}
 
-	domain->intf = mapped_ring;
+	domain->console.intf = mapped_ring;
 
 	return 0;
 }
@@ -639,20 +639,6 @@ struct xen_domain *domid_to_domain(uint32_t domid)
 	return NULL;
 }
 
-int domain_console_start(uint32_t domid)
-{
-	struct xen_domain *domain;
-
-	domain = domid_to_domain(domid);
-	if (!domain) {
-		LOG_ERR("domid#%u is not found", domid);
-		/* Domain with requested domid is not present in list */
-		return -EINVAL;
-	}
-
-	return start_domain_console(domain);
-}
-
 int domain_console_stop(uint32_t domid)
 {
 	struct xen_domain *domain;
@@ -664,7 +650,7 @@ int domain_console_stop(uint32_t domid)
 		return -EINVAL;
 	}
 
-	return stop_domain_console(domain);
+	return xen_stop_domain_console(domain);
 }
 
 void initialize_xenstore(uint32_t domid, const struct xen_domain_cfg *domcfg, const struct xen_domain *domain)
@@ -856,17 +842,10 @@ int domain_create(struct xen_domain_cfg *domcfg, uint32_t domid)
 	LOG_DBG("Map domain ring succeeded");
 
 	/* TODO: for debug, remove this or set as optional */
-	rc = init_domain_console(domain);
+	rc = xen_init_domain_console(domain);
 
 	if (rc) {
 		LOG_ERR("Unable to init domain console (rc=%d)", rc);
-		return rc;
-	}
-
-	rc = start_domain_console(domain);
-
-	if (rc) {
-		LOG_ERR("Unable to start domain console (rc=%d)", rc);
 		return rc;
 	}
 
@@ -910,9 +889,9 @@ int domain_destroy(uint32_t domid)
 
 	stop_domain_stored(domain);
 	/* TODO: do this on console destroying */
-	stop_domain_console(domain);
+	xen_stop_domain_console(domain);
 
-	unmap_domain_ring(domain->intf);
+	unmap_domain_ring(domain->console.intf);
 	unmap_domain_ring(domain->domint);
 
 	rc = xen_domctl_destroydomain(domid);
